@@ -1,0 +1,15 @@
+{
+    "name": "snake-game-root",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "start": "./start.sh",
+        "install:all": "cd backend && npm install && cd ../frontend && npm install",
+        "setup": "npm run install:all && cd backend && npx prisma generate",
+        "dev:backend": "cd backend && npm run dev",
+        "dev:frontend": "cd frontend && npm run dev",
+        "test:backend": "cd backend && npm test",
+        "test:frontend": "cd frontend && npm test",
+        "test:e2e": "cd frontend && npm run test:e2e"
+    }
+}
