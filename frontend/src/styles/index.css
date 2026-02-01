@@ -216,6 +216,13 @@ h2 {
   font-family: 'JetBrains Mono', monospace;
 }
 
+.game-stat-meta {
+  font-size: 0.6rem;
+  color: var(--color-text-dim);
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
 /* Loading Spinner */
 .spinner {
   border: 3px solid rgba(217, 119, 6, 0.1);

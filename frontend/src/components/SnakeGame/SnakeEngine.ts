@@ -6,6 +6,7 @@ export interface GameState {
     food: Position;
     direction: Direction;
     score: number;
+    clicks: number;
     isGameOver: boolean;
     isPaused: boolean;
 }
@@ -38,6 +39,7 @@ export class SnakeEngine {
             ]),
             direction: 'RIGHT',
             score: 0,
+            clicks: 0,
             isGameOver: false,
             isPaused: false,
         };
@@ -75,6 +77,7 @@ export class SnakeEngine {
 
         if (opposites[newDirection] !== this.state.direction) {
             this.state.direction = newDirection;
+            this.state.clicks += 1;
         }
     }
 

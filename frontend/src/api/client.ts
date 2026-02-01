@@ -37,8 +37,30 @@ export const userAPI = {
 
 // Game API
 export const gameAPI = {
-    saveSession: (score: number, duration: number, betAmount: number = 0, targetScore: number = 0) =>
-        api.post('/api/game/save-session', { score, duration, betAmount, targetScore }),
+    saveSession: (
+        score: number,
+        duration: number,
+        betAmount: number = 0,
+        targetScore: number = 0,
+        timeTarget: number = 0,
+        survivalTarget: number = 0,
+        clicksTarget: number = 0,
+        speed: string = 'NORMAL',
+        clicksUsed: number = 0,
+        isDoubleOrNothing: boolean = false
+    ) =>
+        api.post('/api/game/save-session', {
+            score,
+            duration,
+            betAmount,
+            targetScore,
+            timeTarget,
+            survivalTarget,
+            clicksTarget,
+            speed,
+            clicksUsed,
+            isDoubleOrNothing
+        }),
 
     getLeaderboard: (limit = 10) =>
         api.get('/api/game/leaderboard', { params: { limit } }),

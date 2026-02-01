@@ -38,6 +38,12 @@ model GameSession {
   // Betting fields
   betAmount   Int      @default(0)
   targetScore Int      @default(0)
+  timeTarget  Int?     // Target time (seconds) to achieve score
+  survivalTarget Int?  // Target time (seconds) to survive
+  clicksTarget Int?    // Target directional changes
+  speed       String   @default("NORMAL")
+  clicksUsed  Int      @default(0)
+  isDoubleOrNothing Boolean @default(false)
   payout      Int      @default(0)
   won         Boolean  @default(false)
   

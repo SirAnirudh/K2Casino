@@ -8,33 +8,78 @@ import { useAuth } from '../contexts/AuthContext';
 const SnakeGamePage: React.FC = () => {
     const navigate = useNavigate();
     const { user, refreshProfile } = useAuth();
-    const { gameState, setDirection, togglePause, reset, getDuration, gridSize } = useSnakeGame({
-        gridSize: 20,
-        speed: 150,
-    });
 
     // Betting State
     const [isBetting, setIsBetting] = useState(true);
     const [betAmount, setBetAmount] = useState(100);
     const [targetScore, setTargetScore] = useState(10);
+    const [timeTarget, setTimeTarget] = useState(0);
+    const [survivalTarget, setSurvivalTarget] = useState(0);
+    const [clicksTarget, setClicksTarget] = useState(0);
+    const [speedScale, setSpeedScale] = useState<any>('NORMAL');
+    const [isDoubleOrNothing, setIsDoubleOrNothing] = useState(false);
+
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
     const hasAutoSaved = useRef(false);
 
-    // Odds calculation for UI feedback
-    const getMultiplier = (target: number) => {
-        if (target >= 101) return 500.0;
-        if (target >= 76) return 100.0;
-        if (target >= 51) return 30.0;
-        if (target >= 36) return 12.0;
-        if (target >= 21) return 5.0;
-        if (target >= 11) return 2.5;
-        if (target >= 6) return 1.5;
-        if (target >= 1) return 1.2;
-        return 1;
+    const speedIntervals: Record<any, number> = {
+        SLOW: 250,
+        NORMAL: 150,
+        FAST: 100,
+        VERY_FAST: 70,
+        LIGHTNING: 40,
     };
 
-    const potentialPayout = Math.floor(betAmount * getMultiplier(targetScore));
+    const { gameState, setDirection, togglePause, reset, getDuration, gridSize } = useSnakeGame({
+        gridSize: 20,
+        speed: speedIntervals[speedScale] || 150,
+    });
+
+    // Odds calculation for UI feedback
+    const calculateMultiplier = () => {
+        // Simple client-side preview of the logic in backend/src/utils/odds.ts
+        let mult = 1.0;
+        let active = 0;
+
+        if (targetScore > 0) {
+            if (targetScore >= 101) mult *= 500;
+            else if (targetScore >= 76) mult *= 100;
+            else if (targetScore >= 51) mult *= 30;
+            else if (targetScore >= 36) mult *= 12;
+            else if (targetScore >= 21) mult *= 5;
+            else if (targetScore >= 11) mult *= 2.5;
+            else if (targetScore >= 6) mult *= 1.5;
+            else if (targetScore >= 1) mult *= 1.2;
+            active++;
+        }
+
+        if (targetScore > 0 && timeTarget > 0) {
+            mult *= (1.0 + (targetScore / timeTarget) * 0.5);
+            active++;
+        }
+
+        if (targetScore === 0 && survivalTarget > 0) {
+            mult *= (1.0 + (survivalTarget / 30));
+            active++;
+        }
+
+        if (clicksTarget > 0) {
+            const baseline = targetScore + survivalTarget / 2;
+            mult *= (1.0 + (baseline / clicksTarget) * 0.3);
+            active++;
+        }
+
+        if (active > 1) mult *= (1 + (active - 1) * 0.1);
+
+        const speeds: Record<string, number> = { SLOW: 0.5, NORMAL: 1, FAST: 1.5, VERY_FAST: 2, LIGHTNING: 3 };
+        mult *= (speeds[speedScale] || 1);
+
+        return parseFloat(mult.toFixed(2));
+    };
+
+    const multiplier = calculateMultiplier();
+    const potentialPayout = Math.floor(betAmount * multiplier);
 
     // Handle Auto-Save on Game Over
     useEffect(() => {
@@ -93,7 +138,7 @@ const SnakeGamePage: React.FC = () => {
     }, [setDirection, togglePause, reset, gameState?.isGameOver, isBetting]);
 
     const handleStartGame = () => {
-        if (betAmount > (user?.bankBalance || 0)) {
+        if (!isDoubleOrNothing && betAmount > (user?.bankBalance || 0)) {
             setSaveMessage('Insufficient credit for this bet.');
             return;
         }
@@ -105,6 +150,17 @@ const SnakeGamePage: React.FC = () => {
 
     const handleRestart = () => {
         setIsBetting(true);
+        setIsDoubleOrNothing(false);
+        setSaveMessage('');
+        hasAutoSaved.current = false;
+        reset();
+    };
+
+    const handleDoubleOrNothing = () => {
+        // Use the potential payout from the previous win as the new bet amount
+        // But we actually just pass the won flag to the backend
+        setIsDoubleOrNothing(true);
+        setIsBetting(false);
         setSaveMessage('');
         hasAutoSaved.current = false;
         reset();
@@ -121,7 +177,13 @@ const SnakeGamePage: React.FC = () => {
                 gameState.score,
                 getDuration(),
                 betAmount,
-                targetScore
+                targetScore,
+                timeTarget,
+                survivalTarget,
+                clicksTarget,
+                speedScale,
+                gameState.clicks,
+                isDoubleOrNothing
             );
 
             const won = response.data.won;
@@ -157,39 +219,101 @@ const SnakeGamePage: React.FC = () => {
                 </div>
 
                 {isBetting ? (
-                    <div className="card" style={{ maxWidth: '500px', margin: '0 auto', textAlign: 'center' }}>
-                        <h2 style={{ marginBottom: '2rem', color: 'var(--color-accent-gold)' }}>Place Your Stakes</h2>
+                    <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+                        <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: 'var(--color-accent-gold)' }}>Place Your Stakes</h2>
 
+                        {/* Bet Amount */}
                         <div className="input-group">
-                            <label>BET AMOUNT ($)</label>
+                            <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>STAKE ($)</span>
+                                <span style={{ color: 'var(--color-text-dim)', fontSize: '0.7rem' }}>MAX: ${user?.bankBalance.toLocaleString()}</span>
+                            </label>
                             <input
                                 type="number"
                                 value={betAmount}
                                 onChange={(e) => setBetAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                                style={{ textAlign: 'center', fontSize: '1.5rem' }}
+                                style={{ textAlign: 'center', fontSize: '1.5rem', borderColor: 'var(--color-accent-gold)' }}
                             />
                         </div>
 
-                        <div className="input-group">
-                            <label>TARGET SCORE (COINS)</label>
-                            <input
-                                type="number"
-                                value={targetScore}
-                                onChange={(e) => setTargetScore(Math.max(1, parseInt(e.target.value) || 1))}
-                                style={{ textAlign: 'center', fontSize: '1.5rem' }}
-                            />
+                        {/* Speed Selection */}
+                        <div className="input-group" style={{ marginBottom: '2rem' }}>
+                            <label>SNAKE SPEED</label>
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                                {['SLOW', 'NORMAL', 'FAST', 'VERY_FAST', 'LIGHTNING'].map((s) => (
+                                    <button
+                                        key={s}
+                                        onClick={() => setSpeedScale(s)}
+                                        className={`btn ${speedScale === s ? 'btn-primary' : ''}`}
+                                        style={{
+                                            flex: 1,
+                                            fontSize: '0.6rem',
+                                            padding: '0.5rem 0',
+                                            background: speedScale === s ? '' : 'rgba(255,255,255,0.05)',
+                                            border: speedScale === s ? '' : '1px solid rgba(255,255,255,0.1)'
+                                        }}
+                                    >
+                                        {s}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
-                        <div style={{ margin: '2rem 0', padding: '1.5rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px dashed var(--color-accent-gold)' }}>
-                            <p style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>POTENTIAL PAYOUT</p>
-                            <p style={{ fontSize: '2.5rem', fontWeight: '900', color: 'var(--color-success)' }}>${potentialPayout.toLocaleString()}</p>
-                            <p style={{ fontSize: '0.7rem', color: 'var(--color-accent-gold)', marginTop: '0.5rem' }}>ODDS: {getMultiplier(targetScore)}x</p>
+                        {/* Parlay Targets */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="input-group">
+                                <label style={{ fontSize: '0.7rem' }}>COINS TARGET</label>
+                                <input
+                                    type="number"
+                                    placeholder="Off"
+                                    value={targetScore || ''}
+                                    onChange={(e) => setTargetScore(Math.max(0, parseInt(e.target.value) || 0))}
+                                    style={{ textAlign: 'center' }}
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label style={{ fontSize: '0.7rem' }}>{targetScore > 0 ? 'TIME LIMIT (SEC)' : 'SURVIVAL (SEC)'}</label>
+                                <input
+                                    type="number"
+                                    placeholder="Off"
+                                    value={targetScore > 0 ? (timeTarget || '') : (survivalTarget || '')}
+                                    onChange={(e) => {
+                                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                                        if (targetScore > 0) setTimeTarget(val);
+                                        else setSurvivalTarget(val);
+                                    }}
+                                    style={{ textAlign: 'center' }}
+                                />
+                            </div>
+                            <div className="input-group" style={{ gridColumn: 'span 2' }}>
+                                <label style={{ fontSize: '0.7rem' }}>MOVE CONSTRAINT (MAX CLICKS)</label>
+                                <input
+                                    type="number"
+                                    placeholder="No Limit"
+                                    value={clicksTarget || ''}
+                                    onChange={(e) => setClicksTarget(Math.max(0, parseInt(e.target.value) || 0))}
+                                    style={{ textAlign: 'center' }}
+                                />
+                            </div>
+                        </div>
+
+                        <div style={{ margin: '1.5rem 0', padding: '1rem', background: 'rgba(2, 6, 23, 0.4)', borderRadius: '8px', border: '1px solid var(--color-accent-gold)', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-dim)', textTransform: 'uppercase', letterSpacing: '2px' }}>Parlay Payout</div>
+                            <div style={{ fontSize: '2.5rem', fontWeight: '900', color: 'var(--color-success)', margin: '0.2rem 0' }}>
+                                ${potentialPayout.toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-accent-gold)' }}>ODDS: {multiplier.toFixed(2)}x</div>
                         </div>
 
                         {saveMessage && <div className="error" style={{ marginBottom: '1rem' }}>{saveMessage}</div>}
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <button onClick={handleStartGame} className="btn btn-primary" style={{ width: '100%', fontSize: '1.2rem', padding: '1rem' }}>
+                            <button
+                                onClick={handleStartGame}
+                                className="btn btn-primary"
+                                disabled={multiplier <= 1 && betAmount > 0}
+                                style={{ width: '100%', fontSize: '1.2rem', padding: '1rem' }}
+                            >
                                 START THE RUN
                             </button>
                             <button onClick={handleBackToHome} className="btn" style={{ width: '100%', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -203,27 +327,34 @@ const SnakeGamePage: React.FC = () => {
                             display: 'flex',
                             justifyContent: 'space-between',
                             marginBottom: '1.5rem',
-                            gap: '1.5rem'
+                            gap: '1rem',
+                            flexWrap: 'wrap'
                         }}>
                             <div className="game-stat-box" style={{ flex: 1, border: gameState.score >= targetScore ? '2px solid var(--color-success)' : '1px solid var(--color-border)' }}>
-                                <div className="game-stat-label">Loot Collected</div>
-                                <div className="game-stat-value" style={{ color: gameState.score >= targetScore ? 'var(--color-success)' : 'var(--color-accent-toxic)' }}>
-                                    {gameState.score.toLocaleString()}
-                                </div>
-                                <div style={{ fontSize: '0.6rem', color: 'var(--color-text-dim)', marginTop: '4px' }}>GOAL: {targetScore}</div>
+                                <div className="game-stat-label">Loot</div>
+                                <div className="game-stat-value">{gameState.score}</div>
+                                {targetScore > 0 && <div className="game-stat-meta">GOAL: {targetScore}</div>}
                             </div>
-                            <div className="game-stat-box" style={{ flex: 1 }}>
-                                <div className="game-stat-label">Target Multiplier</div>
-                                <div className="game-stat-value" style={{ color: '#fff' }}>
-                                    {getMultiplier(targetScore)}x
+                            {(timeTarget > 0 || survivalTarget > 0) && (
+                                <div className="game-stat-box" style={{ flex: 1 }}>
+                                    <div className="game-stat-label">{targetScore > 0 ? 'Timer' : 'Surviving'}</div>
+                                    <div className="game-stat-value">{getDuration()}s</div>
+                                    <div className="game-stat-meta">{targetScore > 0 ? `LIMIT: ${timeTarget}s` : `GOAL: ${survivalTarget}s`}</div>
                                 </div>
-                                <div style={{ fontSize: '0.6rem', color: 'var(--color-text-dim)', marginTop: '4px' }}>EST. PAYOUT: ${potentialPayout.toLocaleString()}</div>
-                            </div>
+                            )}
+                            {clicksTarget > 0 && (
+                                <div className="game-stat-box" style={{ flex: 1 }}>
+                                    <div className="game-stat-label">Moves</div>
+                                    <div className="game-stat-value">{gameState.clicks}</div>
+                                    <div className="game-stat-meta">MAX: {clicksTarget}</div>
+                                </div>
+                            )}
                             <div className="game-stat-box" style={{ flex: 1 }}>
                                 <div className="game-stat-label">Stake</div>
                                 <div className="game-stat-value" style={{ color: 'var(--color-accent-gold)' }}>
                                     ${betAmount.toLocaleString()}
                                 </div>
+                                <div className="game-stat-meta">{speedScale} ({multiplier}x)</div>
                             </div>
                         </div>
 
@@ -268,39 +399,40 @@ const SnakeGamePage: React.FC = () => {
                                         padding: '2rem',
                                         zIndex: 20
                                     }}>
-                                        <h2 style={{ color: gameState.score >= targetScore ? 'var(--color-success)' : 'var(--color-accent-blood)', fontSize: '4rem', fontWeight: 900, marginBottom: '0.5rem' }}>
-                                            {gameState.score >= targetScore ? 'YOU WIN!' : 'BUSTED!'}
+                                        <h2 style={{ color: saveMessage.includes('WINNER') ? 'var(--color-success)' : 'var(--color-accent-blood)', fontSize: '4rem', fontWeight: 900, marginBottom: '0.5rem' }}>
+                                            {saveMessage.includes('WINNER') ? 'SWEEP!' : 'BUSTED!'}
                                         </h2>
 
                                         <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-                                            <p style={{ fontSize: '0.9rem', color: 'var(--color-accent-gold)', fontWeight: 700, textTransform: 'uppercase' }}>Coins Collected</p>
+                                            <p style={{ fontSize: '0.9rem', color: 'var(--color-accent-gold)', fontWeight: 700, textTransform: 'uppercase' }}>Session Result</p>
                                             <p style={{
-                                                fontSize: '3.5rem',
+                                                fontSize: '2.5rem',
                                                 fontWeight: '900',
                                                 color: '#fff',
-                                                textShadow: gameState.score >= targetScore ? '0 0 20px rgba(16, 185, 129, 0.5)' : '0 0 20px rgba(239, 68, 68, 0.5)'
                                             }}>
-                                                {gameState.score}
-                                            </p>
-                                            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>
-                                                TARGET WAS: {targetScore}
+                                                ${saveMessage.includes('WINNER') ? (potentialPayout).toLocaleString() : '0'}
                                             </p>
                                         </div>
 
                                         {isSaving && <div className="spinner-small" style={{ marginBottom: '1rem' }}></div>}
 
                                         {saveMessage && (
-                                            <div className={saveMessage.includes('WINNER') ? 'success' : 'error'} style={{ textAlign: 'center', fontSize: '1rem', fontWeight: 'bold', width: '100%', maxWidth: '300px' }}>
+                                            <div className={saveMessage.includes('WINNER') ? 'success' : 'error'} style={{ textAlign: 'center', fontSize: '1rem', fontWeight: 'bold', width: '100%', maxWidth: '300px', marginBottom: '1rem' }}>
                                                 {saveMessage}
                                             </div>
                                         )}
 
-                                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center', marginTop: '1rem' }}>
+                                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                            {saveMessage.includes('WINNER') && (
+                                                <button onClick={handleDoubleOrNothing} className="btn" style={{ padding: '0.8rem 2rem', background: 'var(--color-accent-blood)', borderColor: 'var(--color-accent-blood)' }}>
+                                                    DOUBLE OR NOTHING
+                                                </button>
+                                            )}
                                             <button onClick={handleRestart} className="btn btn-primary" style={{ padding: '0.8rem 2rem' }}>
-                                                New Bet (R)
+                                                New Parlay (R)
                                             </button>
                                             <button onClick={handleBackToHome} className="btn" style={{ padding: '0.8rem 2rem' }}>
-                                                Return to Den
+                                                Return Home
                                             </button>
                                         </div>
                                     </div>
