@@ -15,9 +15,15 @@ export class SnakeEngine {
     private gridSize: number;
     private state: GameState;
     private startTime: number;
+    private timeLimit: number = 0;
+    private clicksLimit: number = 0;
+    private targetScore: number = 0;
 
-    constructor(gridSize: number = 20) {
+    constructor(gridSize: number = 20, timeLimit: number = 0, clicksLimit: number = 0, targetScore: number = 0) {
         this.gridSize = gridSize;
+        this.timeLimit = timeLimit;
+        this.clicksLimit = clicksLimit;
+        this.targetScore = targetScore;
         this.startTime = Date.now();
         this.state = this.initializeGame();
     }
@@ -92,6 +98,18 @@ export class SnakeEngine {
             return this.state;
         }
 
+        // Fail-Fast: Check Constraints
+        const duration = this.getDuration();
+        if (this.timeLimit > 0 && duration > this.timeLimit) {
+            this.state.isGameOver = true;
+            return this.state;
+        }
+
+        if (this.clicksLimit > 0 && this.state.clicks > this.clicksLimit) {
+            this.state.isGameOver = true;
+            return this.state;
+        }
+
         const head = this.state.snake[0];
         let newHead: Position;
 
@@ -139,6 +157,13 @@ export class SnakeEngine {
         if (newHead.x === this.state.food.x && newHead.y === this.state.food.y) {
             this.state.score += 1;
             this.state.food = this.generateFood(newSnake);
+
+            // Win-Fast: Immediate victory
+            if (this.targetScore > 0 && this.state.score >= this.targetScore) {
+                this.state.isGameOver = true;
+                this.state.snake = newSnake;
+                return this.state;
+            }
         } else {
             // Remove tail if no food eaten
             newSnake.pop();
@@ -163,5 +188,11 @@ export class SnakeEngine {
     public reset(): void {
         this.startTime = Date.now();
         this.state = this.initializeGame();
+    }
+
+    public updateConstraints(timeLimit: number, clicksLimit: number, targetScore: number): void {
+        this.timeLimit = timeLimit;
+        this.clicksLimit = clicksLimit;
+        this.targetScore = targetScore;
     }
 }

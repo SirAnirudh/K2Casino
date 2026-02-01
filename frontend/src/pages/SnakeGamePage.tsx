@@ -21,20 +21,43 @@ const SnakeGamePage: React.FC = () => {
 
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
-    const hasAutoSaved = useRef(false);
-
     const speedIntervals: Record<any, number> = {
-        SLOW: 250,
-        NORMAL: 150,
-        FAST: 100,
-        VERY_FAST: 70,
-        LIGHTNING: 40,
+        NORMAL: 100,
+        FAST: 70,
+        VERY_FAST: 50,
+        LIGHTNING: 30,
     };
 
     const { gameState, setDirection, togglePause, reset, getDuration, gridSize } = useSnakeGame({
         gridSize: 20,
-        speed: speedIntervals[speedScale] || 150,
+        speed: speedIntervals[speedScale] || 100,
+        timeLimit: targetScore > 0 ? timeTarget : survivalTarget,
+        clicksLimit: clicksTarget,
+        targetScore: targetScore,
     });
+
+    const [countdown, setCountdown] = useState<number | null>(null);
+    const hasAutoSaved = useRef(false);
+
+    // Countdown Timer
+    useEffect(() => {
+        if (countdown === null) return;
+
+        if (countdown > 0) {
+            const timer = setTimeout(() => {
+                setCountdown(countdown - 1);
+            }, 1000);
+            return () => clearTimeout(timer);
+        } else {
+            // Countdown finished: Unpause and hide overlay
+            const timer = setTimeout(() => {
+                setCountdown(null);
+                // The engine might be paused initially or we force it unpaused here
+                if (gameState?.isPaused) togglePause();
+            }, 1000); // Show "GO!" for 1 second
+            return () => clearTimeout(timer);
+        }
+    }, [countdown, gameState?.isPaused, togglePause]);
 
     // Odds calculation for UI feedback
     const calculateMultiplier = () => {
@@ -72,7 +95,7 @@ const SnakeGamePage: React.FC = () => {
 
         if (active > 1) mult *= (1 + (active - 1) * 0.1);
 
-        const speeds: Record<string, number> = { SLOW: 0.5, NORMAL: 1, FAST: 1.5, VERY_FAST: 2, LIGHTNING: 3 };
+        const speeds: Record<string, number> = { NORMAL: 1, FAST: 1.5, VERY_FAST: 2, LIGHTNING: 3 };
         mult *= (speeds[speedScale] || 1);
 
         return parseFloat(mult.toFixed(2));
@@ -146,6 +169,11 @@ const SnakeGamePage: React.FC = () => {
         setSaveMessage('');
         hasAutoSaved.current = false;
         reset();
+
+        // Start countdown
+        setCountdown(3);
+        // Ensure engine starts paused
+        if (gameState && !gameState.isPaused) togglePause();
     };
 
     const handleRestart = () => {
@@ -164,6 +192,9 @@ const SnakeGamePage: React.FC = () => {
         setSaveMessage('');
         hasAutoSaved.current = false;
         reset();
+
+        // Start countdown
+        setCountdown(3);
     };
 
     const handleSaveResult = async () => {
@@ -240,7 +271,7 @@ const SnakeGamePage: React.FC = () => {
                         <div className="input-group" style={{ marginBottom: '2rem' }}>
                             <label>SNAKE SPEED</label>
                             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                {['SLOW', 'NORMAL', 'FAST', 'VERY_FAST', 'LIGHTNING'].map((s) => (
+                                {['NORMAL', 'FAST', 'VERY_FAST', 'LIGHTNING'].map((s) => (
                                     <button
                                         key={s}
                                         onClick={() => setSpeedScale(s)}
@@ -362,7 +393,34 @@ const SnakeGamePage: React.FC = () => {
                             <div style={{ position: 'relative' }}>
                                 <SnakeCanvas gameState={gameState} gridSize={gridSize} />
 
-                                {gameState.isPaused && (
+                                {countdown !== null && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        background: 'rgba(2, 6, 23, 0.6)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        zIndex: 30,
+                                        pointerEvents: 'none'
+                                    }}>
+                                        <div style={{
+                                            fontSize: '8rem',
+                                            fontWeight: '900',
+                                            color: countdown === 0 ? 'var(--color-success)' : 'var(--color-accent-gold)',
+                                            textShadow: '0 0 40px rgba(0,0,0,0.5)',
+                                            transform: 'scale(1.2)',
+                                            transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                                        }}>
+                                            {countdown === 0 ? 'GO!' : countdown}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {gameState.isPaused && countdown === null && (
                                     <div style={{
                                         position: 'absolute',
                                         top: 0,
