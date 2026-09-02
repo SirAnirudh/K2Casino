@@ -1,6 +1,6 @@
 # Snake Game Application
 
-A full-stack horror-themed snake game with user authentication and virtual currency system.
+Pretend gamble so you don't actually gamble.
 
 ## 🎮 Features
 
