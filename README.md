@@ -1,6 +1,5 @@
-# Snake Game Application
 
-Pretend gamble so you don't actually gamble.
+# Pretend gamble so you don't actually gamble.
 
 ## 🎮 Features
 
